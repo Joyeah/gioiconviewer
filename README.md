@@ -6,7 +6,4 @@ version: Gio 0.8.0
 
 - View all icons
 - Search icon by name
-
-
-## TODO 
-- Add Scrollbar (need change layout `Flex` to `List`)
+- Scrollbar
