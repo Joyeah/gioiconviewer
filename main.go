@@ -7,20 +7,14 @@ import (
 	"os"
 	"strings"
 
-	"gioui.org/layout"
-	"gioui.org/unit"
-	"gioui.org/widget"
-	"gioui.org/x/component"
-
-	// "gioui.org/widget"
-	// "golang.org/x/exp/shiny/materialdesign/icons"
-	// "golang.org/x/exp/shiny/unit"
-
 	"gioui.org/app"
 	"gioui.org/font/gofont"
+	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/text"
+	"gioui.org/widget"
 	"gioui.org/widget/material"
+	"gioui.org/x/component"
 )
 
 type (
@@ -45,9 +39,12 @@ type UI struct {
 	inputAlignment         text.Alignment
 	textField, resultField component.TextField
 	// click                  widget.Clickable
-	search_txt            string // 用于存储搜索文本
-	iconitems []IconItem //用于显示的icon
-	iconitems_all []IconItem  // 所有的icon
+	search_txt    string     // 用于存储搜索文本
+	iconitems     []IconItem //用于显示的icon
+	iconitems_all []IconItem // 所有的icon
+
+	list      widget.List
+	scrollbar widget.Scrollbar
 }
 
 func main() {
@@ -56,7 +53,7 @@ func main() {
 		w := new(app.Window)
 		w.Option(
 			// app.Size(unit.Dp(800), unit.Dp(400)),
-			app.Title("Gio Icon Viewer"),
+			app.Title("Gio Icon Viewer(by Joyeah)"),
 		)
 		if err := ui.loop(w); err != nil {
 			log.Fatal(err)
@@ -70,6 +67,7 @@ func (ui *UI) loop(w *app.Window) error {
 	th := material.NewTheme()
 	th.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
 	var ops op.Ops
+	ui.list.Axis = layout.Vertical
 
 	ui.iconitems_all = InitIconItems()
 	ui.iconitems = ui.iconitems_all // 默认显示所有icon
@@ -89,12 +87,10 @@ func (ui *UI) loop(w *app.Window) error {
 
 			layout.Flex{
 				Axis:      layout.Vertical,
-				Spacing:   layout.SpaceEvenly,
-				Alignment: layout.Start,
 			}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-						layout.Flexed(0.3, func(gtx layout.Context) layout.Dimensions {
+						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 							ui.textField.Alignment = ui.inputAlignment
 							ui.textField.SingleLine = true
 							ui.textField.Submit = true
@@ -115,22 +111,12 @@ func (ui *UI) loop(w *app.Window) error {
 									ui.filterIconWidget(txt)
 								}
 							}
-							
+
 							return ui.textField.Layout(gtx, th, "Search")
 						}),
-						// layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						// 	if ui.click.Clicked(gtx) {
-						// 		txt := ui.textField.Text()
-						// 		fmt.Printf("Search clicked: %s\n", txt)
-						// 		if txt == "" {
-						// 			ui.iconitems = ui.iconitems_all
-						// 		} else {
-						// 			ui.filterIconWidget(txt)
-						// 		}
-						// 	}
-						// 	return material.Button(th, &ui.click, "Search").Layout(gtx)
-						// }),
-						layout.Flexed(0.3, func(gtx layout.Context) layout.Dimensions {
+
+						
+						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 							ui.resultField.Alignment = ui.inputAlignment
 							ui.resultField.SingleLine = true
 							return ui.resultField.Layout(gtx, th, "Click an icon to show its name")
@@ -138,11 +124,35 @@ func (ui *UI) loop(w *app.Window) error {
 					)
 				}),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					return layout.UniformInset(unit.Dp(10)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-							ui.layoutAllIconWidget(th, gtx, n)...,
-						)
-					})
+					// 计算每行显示的icon个数
+					total := len(ui.iconitems)
+					listLength := total / n   // 共多少行（不包括最后一行）
+					lastRowItems := total % n // 最后一行的个数
+					if lastRowItems > 0 {
+						listLength += 1 // 如果有最后一行，则加1
+					}
+
+					return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+						layout.Flexed(99, func(gtx C) D {
+
+							return material.List(th, &ui.list).Layout(gtx, listLength, func(gtx C, i int) D {
+								// return rows[i]
+								// return material.Label(th, unit.Sp(16), fmt.Sprintf("Item %d", i)).Layout(gtx)
+								var cells = ui.layoutRowWidget(th, gtx, n, i, listLength, lastRowItems)
+
+								return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+									cells...,
+								)
+
+							})
+
+						}),
+						layout.Flexed(1, func(gtx C) D {
+							start, end := float32(ui.list.Position.First), float32(ui.list.Position.First+ui.list.Position.Count)
+							return material.Scrollbar(th, &ui.scrollbar).Layout(gtx, layout.Vertical, start, end)
+						}),
+					)
+
 				}),
 			)
 
@@ -151,59 +161,47 @@ func (ui *UI) loop(w *app.Window) error {
 	}
 }
 
-func (ui *UI) layoutAllIconWidget(th *material.Theme, gtx layout.Context, columns int) []layout.FlexChild {
-	var items []layout.FlexChild
-
-	total := len(ui.iconitems)
-	rows := total / columns         // 共多少行（不包括最后一行）
-	lastRowItems := total % columns // 最后一行的个数
-
-	for i := 0; i < rows; i++ {
-		var cells []layout.FlexChild
-		for j := i * columns; j < (i+1)*columns; j++ {
-			iconitem := &ui.iconitems[j] // 注意：不要忘记&
+func (ui *UI) layoutRowWidget(th *material.Theme, gtx C, n int, i int, listLength, lastRowItems int) []layout.FlexChild {
+	var cells []layout.FlexChild
+	// fmt.Printf("listLength: %d, lastRowItems: %d, i: %d\n", listLength, lastRowItems, i)
+	if i < listLength-1 {
+		cells = make([]layout.FlexChild, n)
+		for j := 0; j < n; j++ {
+			iconitem := &ui.iconitems[i*n + j]
 			if iconitem.click.Clicked(gtx) {
 				fmt.Printf("%v clicked\n", iconitem.name)
 				ui.resultField.SetText(iconitem.name)
 			}
-			cells = append(cells, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			cells[j] = layout.Flexed(1, func(gtx C) D {
 				return iconitem.Layout(gtx, th)
-			}))
+			})
 		}
-		row := layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-				cells...,
-			)
-		})
-		items = append(items, row)
-	}
-
-	// 最后一行
-	if lastRowItems > 0 {
-		var cells []layout.FlexChild
-		for j := rows * columns; j < total; j++ {
-			iconitem := &ui.iconitems[j]
+	} else {
+		// 最后一行
+		if i == listLength-1 && lastRowItems > 0 {
+			cells = make([]layout.FlexChild, lastRowItems)
+		} else {
+			lastRowItems = n 
+			cells = make([]layout.FlexChild, n)
+		}
+		for j := 0; j < lastRowItems; j++ {
+			// fmt.Printf("i: %d, j: %d, n: %d\n", i, j, n)
+			iconitem := &ui.iconitems[i*n + j]
 			if iconitem.click.Clicked(gtx) {
 				fmt.Printf("%v clicked\n", iconitem.name)
 				ui.resultField.SetText(iconitem.name)
 			}
-			cells = append(cells, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return iconitem.Layout(gtx, th)
-			}))
+			cells[j] = layout.Rigid(func(gtx C) D {
+				return ui.iconitems[i*n + j].Layout(gtx, th)
+			})
 		}
-		row := layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-				cells...,
-			)
-		})
-		items = append(items, row)
 	}
-
-	return items
+	return cells
 }
 
+
 func (ui *UI) filterIconWidget(txt string) {
-	fmt.Printf("filterIconWidget: %s\n", txt)
+	// fmt.Printf("filterIconWidget: %s\n", txt)
 	var iconitems []IconItem = make([]IconItem, 0)
 	t := strings.ToLower(txt)
 	for _, item := range ui.iconitems_all {
