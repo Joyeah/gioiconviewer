@@ -11,4 +11,6 @@ version: Gio 0.8.0
 ## Snapshots
 
 windows:
-![alt text](snapshot.jpg)
+![gioiconviewer.exe snapshot](snapshot.jpg)
+
+download: [pCloud](https://u.pcloud.link/publink/show?code=kZmWMB5ZHAbuoQEAKVLG9Lbt3dANxhpdh06y)
