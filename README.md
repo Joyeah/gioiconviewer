@@ -7,3 +7,8 @@ version: Gio 0.8.0
 - View all icons
 - Search icon by name
 - Scrollbar
+
+## Snapshots
+
+windows:
+![alt text](snapshot.jpg)
